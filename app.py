@@ -1,16 +1,16 @@
-%%writefile app.py
 import streamlit as st
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
 import warnings
 import os
+
 warnings.filterwarnings('ignore')
 
 # Load pre-trained ARIMA model using statsmodels native load
 @st.cache_resource
 def load_model():
-    model = ARIMAResults.load('arima_model.pkl')  # Use the new file name
+    model = ARIMAResults.load('arima_model.pkl')
     return model
 
 model = load_model()
@@ -24,80 +24,89 @@ def load_data():
 
 df = load_data()
 
-# AQI Category Function
+# AQI Category & Travel Advice
 def get_aqi_category(aqi):
     if aqi <= 50:
         return "Good", "Air quality is excellent for travel to Lahore. Enjoy your trip!"
     elif aqi <= 100:
-        return "Moderate", "Air quality is acceptable for travel, but sensitive individuals should take precautions."
+        return "Moderate", "Air quality is acceptable, but sensitive people should take care."
     elif aqi <= 150:
-        return "Unhealthy for Sensitive Groups", "Not ideal for travel if you have respiratory issues."
+        return "Unhealthy for Sensitive Groups", "Avoid prolonged outdoor activity if you have respiratory issues."
     elif aqi <= 200:
-        return "Unhealthy", "Poor air quality; reconsider travel or wear masks."
+        return "Unhealthy", "Poor air quality — reconsider travel or wear a mask."
     elif aqi <= 300:
-        return "Very Unhealthy", "Very poor air quality; avoid travel if possible."
+        return "Very Unhealthy", "Avoid travel to Lahore if possible."
     else:
-        return "Hazardous", "Extremely hazardous; strongly advise against traveling."
+        return "Hazardous", "Extremely dangerous — strongly advise against traveling."
 
-# Title & UI
-st.title('Lahore Air Quality Predictor')
-st.sidebar.header('Forecast Settings')
-forecast_steps = st.sidebar.slider('Forecast Days', 1, 90, 30)
+# UI
+st.title("🌫️ Lahore Air Quality Predictor")
 
-st.write("Generate a forecast to see predicted AQI and travel advice.")
+st.sidebar.header("Forecast Settings")
+forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
+
+st.write("Generate a forecast to see predicted AQI levels and travel advice.")
 
 forecast = None
-if st.button('Generate Forecast'):
+if st.button("Generate Forecast"):
     try:
         forecast = model.forecast(steps=forecast_steps)
         
         avg_aqi = forecast.mean()
-        st.subheader(f'{forecast_steps}-Day Forecast (Avg AQI: {avg_aqi:.2f})')
         
-        fig, ax = plt.subplots(figsize=(10,5))
-        ax.plot(range(forecast_steps), forecast, marker='o', color='blue')
-        ax.set_title('Forecasted AQI')
-        ax.set_xlabel('Days Ahead')
-        ax.set_ylabel('AQI')
-        ax.grid(True)
+        st.subheader(f"{forecast_steps}-Day Forecast")
+        st.write(f"**Average Forecasted AQI:** {avg_aqi:.1f}")
+        
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(range(forecast_steps), forecast, marker='o', color='steelblue')
+        ax.set_title("Forecasted AQI Over Time")
+        ax.set_xlabel("Days Ahead")
+        ax.set_ylabel("AQI")
+        ax.grid(True, alpha=0.3)
         st.pyplot(fig)
         
+        # Confidence intervals
         conf_int = model.get_forecast(steps=forecast_steps).conf_int()
-        st.subheader('Confidence Intervals')
+        st.subheader("95% Confidence Intervals (First 10 Days)")
         st.dataframe(conf_int.head(10))
         
+        # Travel Advice
         category, advice = get_aqi_category(avg_aqi)
-        st.subheader('Travel Advice')
-        st.write(f"**{category}** – {advice}")
+        st.subheader("🧳 Travel Advice for Lahore")
+        st.markdown(f"**AQI Category:** {category} (Avg AQI: {avg_aqi:.1f})")
+        st.info(advice)
         
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error generating forecast: {e}")
 
 # Recent Data
-st.subheader('Recent Historical Data')
+st.subheader("Recent Historical Data")
 st.dataframe(df.tail(10)[['aqi_pm2.5', 'avg_temp_f', 'avg_humidity_percent', 'avg_wind_speed_mph']])
 
-# Feedback Form (after forecast)
+# Feedback Form (only after forecast)
 if forecast is not None:
-    st.header('Feedback on This Prediction')
-    with st.form('feedback_form'):
-        usability = st.slider('Usability (1-5)', 1, 5, 3)
-        accuracy = st.slider('Prediction Accuracy (1-5)', 1, 5, 3)
-        pred_feedback = st.text_area('Was the prediction realistic?')
-        suggestions = st.text_area('Suggestions')
-        submitted = st.form_submit_button('Submit')
+    st.header("📝 Feedback on This Prediction")
+    with st.form("feedback_form"):
+        usability = st.slider("App Usability (1-5)", 1, 5, 3)
+        accuracy = st.slider("Prediction Accuracy (1-5)", 1, 5, 3)
+        realistic = st.text_area("Was the prediction realistic?")
+        suggestions = st.text_area("General suggestions")
+        submitted = st.form_submit_button("Submit Feedback")
         
         if submitted:
-            data = {'Usability': [usability], 'Accuracy': [accuracy],
-                    'Prediction_Feedback': [pred_feedback], 'Suggestions': [suggestions],
-                    'Avg_AQI': [avg_aqi]}
-            df_fb = pd.DataFrame(data)
-            file = 'user_feedback.csv'
+            feedback_entry = {
+                "Usability": [usability],
+                "Accuracy": [accuracy],
+                "Realistic_Feedback": [realistic],
+                "Suggestions": [suggestions],
+                "Avg_Forecast_AQI": [avg_aqi]
+            }
+            fb_df = pd.DataFrame(feedback_entry)
+            file = "user_feedback.csv"
             if os.path.exists(file):
-                df_fb = pd.concat([pd.read_csv(file), df_fb])
-            df_fb.to_csv(file, index=False)
-            st.success('Feedback saved!')
+                fb_df = pd.concat([pd.read_csv(file), fb_df], ignore_index=True)
+            fb_df.to_csv(file, index=False)
+            st.success("Thank you! Your feedback has been saved.")
 
-st.info("Deployed for Assignment 4 | Model uses statsmodels native serialization.")
-st.markdown("---")
-st.write("BSCS-F22 | Data Science")
+st.info("Model: ARIMA saved with statsmodels native method | Assignment 4 Deployment")
+st.caption("Data Science | BSCS-F22")
