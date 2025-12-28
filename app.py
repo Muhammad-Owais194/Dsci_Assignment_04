@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
@@ -7,82 +6,81 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Create connection
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# Load model
+# Load pre-trained ARIMA model using statsmodels native load
 @st.cache_resource
 def load_model():
-    return ARIMAResults.load('arima_model.pkl')
+    model = ARIMAResults.load('arima_model.pkl')
+    return model
 
 model = load_model()
 
-# Load data
+# Load dataset
 @st.cache_data
 def load_data():
-    df = pd.read_csv('df_final.csv', parse_dates=['date']).set_index('date')
+    df = pd.read_csv('df_final.csv', parse_dates=['date'])
+    df = df.sort_values('date').set_index('date')
     return df
 
 df = load_data()
 
-# AQI category
+# Function to categorize AQI and provide travel advice
 def get_aqi_category(aqi):
-    if aqi <= 50: return "Good", "Excellent!"
-    elif aqi <= 100: return "Moderate", "Acceptable."
-    elif aqi <= 150: return "Unhealthy for Sensitive", "Limit exposure."
-    elif aqi <= 200: return "Unhealthy", "Reconsider travel."
-    elif aqi <= 300: return "Very Unhealthy", "Avoid travel."
-    else: return "Hazardous", "Do not travel."
+    if aqi <= 50:
+        return "Good", "Air quality is excellent for travel to Lahore. Enjoy your trip!"
+    elif aqi <= 100:
+        return "Moderate", "Air quality is acceptable for travel, but sensitive individuals should take precautions."
+    elif aqi <= 150:
+        return "Unhealthy for Sensitive Groups", "Not ideal for travel if you have respiratory issues."
+    elif aqi <= 200:
+        return "Unhealthy", "Poor air quality; reconsider travel or wear masks."
+    elif aqi <= 300:
+        return "Very Unhealthy", "Very poor air quality; avoid travel if possible."
+    else:
+        return "Hazardous", "Extremely hazardous; strongly advise against traveling to Lahore."
 
+# App UI
 st.title("🌫️ Lahore Air Quality Predictor")
-forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
 
-forecast = None
-avg_aqi = None
+st.sidebar.header("Forecast Settings")
+forecast_steps = st.sidebar.slider("Forecast Days", min_value=1, max_value=90, value=30)
+
+st.write("Click below to generate the AQI forecast based on historical data (2019–2023).")
+
 if st.button("Generate Forecast"):
-    forecast = model.forecast(steps=forecast_steps)
-    avg_aqi = forecast.mean()
-    st.subheader(f"Avg AQI: {avg_aqi:.1f}")
-    fig, ax = plt.subplots()
-    ax.plot(range(forecast_steps), forecast, marker='o')
-    st.pyplot(fig)
-    conf_int = model.get_forecast(steps=forecast_steps).conf_int()
-    st.subheader("Confidence Intervals")
-    st.dataframe(conf_int.head(10))
-    category, advice = get_aqi_category(avg_aqi)
-    st.subheader("Travel Advice")
-    st.info(f"{category} – {advice}")
+    try:
+        # Generate forecast
+        forecast = model.forecast(steps=forecast_steps)
+        avg_aqi = forecast.mean()
+        
+        st.subheader(f"{forecast_steps}-Day AQI Forecast")
+        st.write(f"**Average Forecasted AQI:** {avg_aqi:.1f}")
+        st.write(f"**Min AQI:** {forecast.min():.1f} | **Max AQI:** {forecast.max():.1f}")
+        
+        # Plot
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(range(forecast_steps), forecast, marker='o', color='steelblue', label='Forecasted AQI')
+        ax.set_title("Forecasted AQI Over Time")
+        ax.set_xlabel("Days Ahead")
+        ax.set_ylabel("AQI")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
+        
+        # Confidence Intervals
+        conf_int = model.get_forecast(steps=forecast_steps).conf_int()
+        st.subheader("95% Confidence Intervals (First 10 Days)")
+        st.dataframe(conf_int.head(10))
+        
+        # Travel Advice
+        category, advice = get_aqi_category(avg_aqi)
+        st.subheader("🧳 Travel Advice for Lahore")
+        st.markdown(f"**AQI Category:** {category} (Average AQI: {avg_aqi:.1f})")
+        st.info(advice)
+        
+    except Exception as e:
+        st.error(f"Error generating forecast: {e}")
 
-st.subheader("Recent Data")
+# Recent Historical Data
+st.subheader("Recent Historical Data")
 st.dataframe(df.tail(10)[['aqi_pm2.5', 'avg_temp_f', 'avg_humidity_percent', 'avg_wind_speed_mph']])
 
-# Feedback
-if forecast is not None:
-    st.header("Feedback")
-    with st.form("feedback_form"):
-        usability = st.slider("Usability (1-5)", 1, 5, 3)
-        accuracy = st.slider("Accuracy (1-5)", 1, 5, 3)
-        realistic = st.text_area("Realistic?")
-        suggestions = st.text_area("Suggestions")
-        submitted = st.form_submit_button("Submit")
-        
-        if submitted:
-            data = [{"Usability": usability, "Accuracy": accuracy, "Realistic": realistic, "Suggestions": suggestions, "Avg_AQI": avg_aqi}]
-            conn.update(worksheet="Sheet1", data=data)  # Appends row
-            st.success("Saved to Google Sheets!")
-            st.rerun()
-
-# Display feedback
-st.header("Submitted Feedback")
-try:
-    feedback_df = conn.read(worksheet="Sheet1")
-    if not feedback_df.empty:
-        st.dataframe(feedback_df)
-        csv = feedback_df.to_csv(index=False)
-        st.download_button("Download CSV", csv, "feedback.csv", "text/csv")
-    else:
-        st.info("No feedback yet.")
-except:
-    st.info("Submit feedback to see it.")
-
-st.caption("Assignment 4 | BSCS-F22")
