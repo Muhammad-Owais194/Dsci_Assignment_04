@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
@@ -6,16 +7,17 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Built-in Google Sheets connection (no gspread!)
-conn = st.connection("gsheets", type="gsheets")
+# Create connection
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Load model and data
+# Load model
 @st.cache_resource
 def load_model():
     return ARIMAResults.load('arima_model.pkl')
 
 model = load_model()
 
+# Load data
 @st.cache_data
 def load_data():
     df = pd.read_csv('df_final.csv', parse_dates=['date']).set_index('date')
@@ -23,9 +25,9 @@ def load_data():
 
 df = load_data()
 
-# AQI category (same as before)
+# AQI category
 def get_aqi_category(aqi):
-    if aqi <= 50: return "Good", "Excellent for travel!"
+    if aqi <= 50: return "Good", "Excellent!"
     elif aqi <= 100: return "Moderate", "Acceptable."
     elif aqi <= 150: return "Unhealthy for Sensitive", "Limit exposure."
     elif aqi <= 200: return "Unhealthy", "Reconsider travel."
@@ -54,7 +56,7 @@ if st.button("Generate Forecast"):
 st.subheader("Recent Data")
 st.dataframe(df.tail(10)[['aqi_pm2.5', 'avg_temp_f', 'avg_humidity_percent', 'avg_wind_speed_mph']])
 
-# Feedback (after forecast)
+# Feedback
 if forecast is not None:
     st.header("Feedback")
     with st.form("feedback_form"):
@@ -66,8 +68,8 @@ if forecast is not None:
         
         if submitted:
             data = [{"Usability": usability, "Accuracy": accuracy, "Realistic": realistic, "Suggestions": suggestions, "Avg_AQI": avg_aqi}]
-            conn.update(worksheet="Sheet1", data=data)  # Appends
-            st.success("Feedback saved!")
+            conn.update(worksheet="Sheet1", data=data)  # Appends row
+            st.success("Saved to Google Sheets!")
             st.rerun()
 
 # Display feedback
@@ -81,6 +83,6 @@ try:
     else:
         st.info("No feedback yet.")
 except:
-    st.info("Submit feedback to see it here.")
+    st.info("Submit feedback to see it.")
 
 st.caption("Assignment 4 | BSCS-F22")
