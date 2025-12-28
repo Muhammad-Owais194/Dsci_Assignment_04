@@ -179,5 +179,5 @@ if os.path.exists(file_path):
 else:
     st.info("No feedback submitted yet. Submit some to see the data here.")
 
-st.info("Model: ARIMA saved with statsmodels native method | Assignment 4 Deployment")
-st.caption("Data Science | BSCS-F22")
+
+
