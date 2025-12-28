@@ -4,9 +4,16 @@ from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
 import warnings
 import os
-from io import StringIO
+import requests
+import base64
 
 warnings.filterwarnings('ignore')
+
+# GitHub API Config (add these as secrets in Streamlit Cloud dashboard: Settings > Secrets)
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]  # Your personal access token (with repo scope)
+GITHUB_OWNER = "Muhammad-Owais194"  # Your username
+GITHUB_REPO = "Dsci_Assignment_04"  # Your repo name
+FEEDBACK_PATH = "user_feedback.csv"  # Path in repo to save CSV
 
 # Load pre-trained ARIMA model using statsmodels native load
 @st.cache_resource
@@ -49,6 +56,7 @@ forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
 st.write("Generate a forecast to see predicted AQI and travel advice.")
 
 forecast = None
+avg_aqi = None
 if st.button("Generate Forecast"):
     try:
         forecast = model.forecast(steps=forecast_steps)
@@ -103,13 +111,55 @@ if forecast is not None:
                 "Avg_Forecast_AQI": [forecast.mean() if forecast is not None else None]
             }
             fb_df = pd.DataFrame(feedback_entry)
+            
+            # Local save first
             file = "user_feedback.csv"
             if os.path.exists(file):
                 existing_df = pd.read_csv(file)
                 fb_df = pd.concat([existing_df, fb_df], ignore_index=True)
             fb_df.to_csv(file, index=False)
-            st.success("Thank you! Your feedback has been saved.")
-            st.experimental_rerun()  # Force app rerun to refresh and show updated CSV
+            
+            # Commit to GitHub
+            try:
+                # Get current SHA (if file exists in repo)
+                get_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{FEEDBACK_PATH}"
+                headers = {
+                    "Accept": "application/vnd.github+json",
+                    "Authorization": f"Bearer {GITHUB_TOKEN}",
+                    "X-GitHub-Api-Version": "2022-11-28"
+                }
+                response = requests.get(get_url, headers=headers)
+                sha = None
+                if response.status_code == 200:
+                    sha = response.json().get("sha")
+                
+                # Read and base64 encode the local CSV
+                with open(file, "rb") as f:
+                    content = f.read()
+                    encoded_content = base64.b64encode(content).decode("utf-8")
+                
+                # Prepare payload
+                payload = {
+                    "message": "Update user_feedback.csv with new feedback",
+                    "content": encoded_content,
+                    "branch": "main"
+                }
+                if sha:
+                    payload["sha"] = sha
+                
+                # PUT request to update/create file
+                update_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{FEEDBACK_PATH}"
+                update_response = requests.put(update_url, json=payload, headers=headers)
+                
+                if update_response.status_code in (200, 201):
+                    st.success("Thank you! Your feedback has been saved and committed to GitHub.")
+                else:
+                    st.warning("Feedback saved locally but GitHub commit failed. Check logs.")
+                    st.write(update_response.json())
+                
+            except Exception as e:
+                st.warning(f"Feedback saved locally but GitHub commit error: {e}")
+            st.experimental_rerun()  # Refresh to show updated table
 
 # Display Submitted Feedback (always try to load)
 st.header("Submitted Feedback Data")
