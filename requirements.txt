@@ -2,5 +2,4 @@ streamlit
 pandas
 matplotlib
 statsmodels
-gspread
-google-auth
+streamlit-gsheets-connection
