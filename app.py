@@ -4,6 +4,7 @@ from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
 import warnings
 import os
+from io import StringIO
 
 warnings.filterwarnings('ignore')
 
@@ -31,27 +32,27 @@ def get_aqi_category(aqi):
     elif aqi <= 100:
         return "Moderate", "Air quality is acceptable, but sensitive people should take care."
     elif aqi <= 150:
-        return "Unhealthy for Sensitive Groups", "Avoid prolonged outdoor activity if you have respiratory issues."
+        return "Unhealthy for Sensitive Groups", "Not ideal for travel if you have respiratory issues."
     elif aqi <= 200:
         return "Unhealthy", "Poor air quality — reconsider travel or wear a mask."
     elif aqi <= 300:
-        return "Very Unhealthy", "Avoid travel to Lahore if possible."
+        return "Very Unhealthy", "Very poor air quality; avoid travel if possible."
     else:
         return "Hazardous", "Extremely dangerous — strongly advise against traveling."
 
-# UI
+# Title & UI
 st.title("🌫️ Lahore Air Quality Predictor")
 
 st.sidebar.header("Forecast Settings")
 forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
 
-st.write("Generate a forecast to see predicted AQI levels and travel advice.")
+st.write("Generate a forecast to see predicted AQI and travel advice.")
 
 forecast = None
+avg_aqi = None
 if st.button("Generate Forecast"):
     try:
         forecast = model.forecast(steps=forecast_steps)
-        
         avg_aqi = forecast.mean()
         
         st.subheader(f"{forecast_steps}-Day Forecast")
@@ -104,9 +105,25 @@ if forecast is not None:
             fb_df = pd.DataFrame(feedback_entry)
             file = "user_feedback.csv"
             if os.path.exists(file):
-                fb_df = pd.concat([pd.read_csv(file), fb_df], ignore_index=True)
+                existing_df = pd.read_csv(file)
+                fb_df = pd.concat([existing_df, fb_df], ignore_index=True)
             fb_df.to_csv(file, index=False)
             st.success("Thank you! Your feedback has been saved.")
+
+# Download Feedback CSV Button (admin feature)
+st.header("Download Feedback Data")
+file_path = 'user_feedback.csv'
+if os.path.exists(file_path):
+    with open(file_path, 'r') as f:
+        csv_data = f.read()
+    st.download_button(
+        label="Download user_feedback.csv",
+        data=csv_data,
+        file_name='user_feedback.csv',
+        mime='text/csv'
+    )
+else:
+    st.info("No feedback submitted yet. Submit some to generate the CSV.")
 
 st.info("Model: ARIMA saved with statsmodels native method | Assignment 4 Deployment")
 st.caption("Data Science | BSCS-F22")
