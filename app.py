@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMAResults
 import matplotlib.pyplot as plt
@@ -7,8 +6,8 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Built-in GSheets connection (uses secrets directly)
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Built-in Google Sheets connection (no gspread!)
+conn = st.connection("gsheets", type="gsheets")
 
 # Load model and data
 @st.cache_resource
@@ -24,17 +23,16 @@ def load_data():
 
 df = load_data()
 
-# AQI function (same as before)
+# AQI category (same as before)
 def get_aqi_category(aqi):
     if aqi <= 50: return "Good", "Excellent for travel!"
-    elif aqi <= 100: return "Moderate", "Acceptable, sensitive groups take care."
-    elif aqi <= 150: return "Unhealthy for Sensitive", "Limit outdoor time if sensitive."
-    elif aqi <= 200: return "Unhealthy", "Reconsider travel or wear mask."
-    elif aqi <= 300: return "Very Unhealthy", "Avoid travel if possible."
-    else: return "Hazardous", "Strongly advise against traveling."
+    elif aqi <= 100: return "Moderate", "Acceptable."
+    elif aqi <= 150: return "Unhealthy for Sensitive", "Limit exposure."
+    elif aqi <= 200: return "Unhealthy", "Reconsider travel."
+    elif aqi <= 300: return "Very Unhealthy", "Avoid travel."
+    else: return "Hazardous", "Do not travel."
 
 st.title("🌫️ Lahore Air Quality Predictor")
-st.sidebar.header("Forecast Settings")
 forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
 
 forecast = None
@@ -46,27 +44,29 @@ if st.button("Generate Forecast"):
     fig, ax = plt.subplots()
     ax.plot(range(forecast_steps), forecast, marker='o')
     st.pyplot(fig)
+    conf_int = model.get_forecast(steps=forecast_steps).conf_int()
+    st.subheader("Confidence Intervals")
+    st.dataframe(conf_int.head(10))
     category, advice = get_aqi_category(avg_aqi)
-    st.subheader("🧳 Travel Advice")
-    st.markdown(f"**{category}** – {advice}")
+    st.subheader("Travel Advice")
+    st.info(f"{category} – {advice}")
 
-# Recent data
 st.subheader("Recent Data")
 st.dataframe(df.tail(10)[['aqi_pm2.5', 'avg_temp_f', 'avg_humidity_percent', 'avg_wind_speed_mph']])
 
-# Feedback
+# Feedback (after forecast)
 if forecast is not None:
-    st.header("📝 Feedback")
+    st.header("Feedback")
     with st.form("feedback_form"):
         usability = st.slider("Usability (1-5)", 1, 5, 3)
         accuracy = st.slider("Accuracy (1-5)", 1, 5, 3)
-        realistic = st.text_area("Was prediction realistic?")
+        realistic = st.text_area("Realistic?")
         suggestions = st.text_area("Suggestions")
         submitted = st.form_submit_button("Submit")
         
         if submitted:
             data = [{"Usability": usability, "Accuracy": accuracy, "Realistic": realistic, "Suggestions": suggestions, "Avg_AQI": avg_aqi}]
-            conn.update(worksheet="Sheet1", data=data)  # Appends to Sheet1
+            conn.update(worksheet="Sheet1", data=data)  # Appends
             st.success("Feedback saved!")
             st.rerun()
 
@@ -81,4 +81,6 @@ try:
     else:
         st.info("No feedback yet.")
 except:
-    st.info("Feedback will appear after first submission.")
+    st.info("Submit feedback to see it here.")
+
+st.caption("Assignment 4 | BSCS-F22")
