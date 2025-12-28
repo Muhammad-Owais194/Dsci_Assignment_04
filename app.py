@@ -9,11 +9,11 @@ import base64
 
 warnings.filterwarnings('ignore')
 
-# GitHub API Config (add these as secrets in Streamlit Cloud dashboard: Settings > Secrets)
-GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]  # Your personal access token (with repo scope)
-GITHUB_OWNER = "Muhammad-Owais194"  # Your username
-GITHUB_REPO = "Dsci_Assignment_04"  # Your repo name
-FEEDBACK_PATH = "user_feedback.csv"  # Path in repo to save CSV
+# GitHub API Config (add GITHUB_TOKEN as secret in Streamlit Cloud dashboard)
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "")  # Fallback if not set
+GITHUB_OWNER = "Muhammad-Owais194"
+GITHUB_REPO = "Dsci_Assignment_04"
+FEEDBACK_PATH = "user_feedback.csv"  # Path in repo
 
 # Load pre-trained ARIMA model using statsmodels native load
 @st.cache_resource
@@ -154,7 +154,7 @@ if forecast is not None:
                 if update_response.status_code in (200, 201):
                     st.success("Thank you! Your feedback has been saved and committed to GitHub.")
                 else:
-                    st.warning("Feedback saved locally but GitHub commit failed. Check logs.")
+                    st.warning("Feedback saved locally but GitHub commit failed: " + str(update_response.status_code))
                     st.write(update_response.json())
                 
             except Exception as e:
