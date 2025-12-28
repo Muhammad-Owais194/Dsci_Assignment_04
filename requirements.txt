@@ -1,5 +1,4 @@
 streamlit
 pandas
 matplotlib
-statsmodels
-st-gsheets-connection
+statsmodels>=0.14.2  # Supports NumPy 2.x
