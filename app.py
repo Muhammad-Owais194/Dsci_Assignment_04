@@ -49,14 +49,12 @@ forecast_steps = st.sidebar.slider("Forecast Days", 1, 90, 30)
 st.write("Generate a forecast to see predicted AQI and travel advice.")
 
 forecast = None
-avg_aqi = None
 if st.button("Generate Forecast"):
     try:
         forecast = model.forecast(steps=forecast_steps)
-        avg_aqi = forecast.mean()
         
-        st.subheader(f"{forecast_steps}-Day Forecast")
-        st.write(f"**Average Forecasted AQI:** {avg_aqi:.1f}")
+        avg_aqi = forecast.mean()
+        st.subheader(f"{forecast_steps}-Day Forecast (Avg AQI: {avg_aqi:.1f})")
         
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(range(forecast_steps), forecast, marker='o', color='steelblue')
@@ -87,6 +85,8 @@ st.dataframe(df.tail(10)[['aqi_pm2.5', 'avg_temp_f', 'avg_humidity_percent', 'av
 # Feedback Form (only after forecast)
 if forecast is not None:
     st.header("📝 Feedback on This Prediction")
+    st.write("Please provide your feedback on the generated prediction.")
+
     with st.form("feedback_form"):
         usability = st.slider("App Usability (1-5)", 1, 5, 3)
         accuracy = st.slider("Prediction Accuracy (1-5)", 1, 5, 3)
@@ -100,7 +100,7 @@ if forecast is not None:
                 "Accuracy": [accuracy],
                 "Realistic_Feedback": [realistic],
                 "Suggestions": [suggestions],
-                "Avg_Forecast_AQI": [avg_aqi]
+                "Avg_Forecast_AQI": [forecast.mean() if forecast is not None else None]
             }
             fb_df = pd.DataFrame(feedback_entry)
             file = "user_feedback.csv"
@@ -109,20 +109,23 @@ if forecast is not None:
                 fb_df = pd.concat([existing_df, fb_df], ignore_index=True)
             fb_df.to_csv(file, index=False)
             st.success("Thank you! Your feedback has been saved.")
+            st.experimental_rerun()  # Force app rerun to refresh and show updated CSV
 
-# Download Feedback CSV Button (admin feature)
-st.header("Download Feedback Data")
+# Display Submitted Feedback (always try to load)
+st.header("Submitted Feedback Data")
 file_path = 'user_feedback.csv'
 if os.path.exists(file_path):
-    with open(file_path, 'r') as f:
-        csv_data = f.read()
+    feedback_df = pd.read_csv(file_path)
+    st.dataframe(feedback_df)  # Display the table of all feedback
+    
+    # Download button
+    csv = feedback_df.to_csv(index=False)
     st.download_button(
         label="Download user_feedback.csv",
-        data=csv_data,
+        data=csv,
         file_name='user_feedback.csv',
         mime='text/csv'
     )
 else:
-    st.info("No feedback submitted yet. Submit some to generate the CSV.")
-
+    st.info("No feedback submitted yet. Submit some to see the data here.")
 
