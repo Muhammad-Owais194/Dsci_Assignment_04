@@ -1,5 +1,5 @@
 streamlit
 pandas
 matplotlib
-statsmodels==0.14.1
+statsmodels
 st-gsheets-connection
